@@ -14,3 +14,8 @@ type Movie struct {
 	Version   int32     // The version number starts at 1 and will be incremented each
 	// time the movie information is updated
 }
+
+//Important: It’s crucial to point out here that all the fields in our Movie struct are
+// exported (i.e. start with a capital letter), which is necessary for them to be visible to
+// Go’s encoding/json package. Any fields which aren’t exported won’t be included
+// when encoding a struct to JSON.
