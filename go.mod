@@ -1,4 +1,4 @@
-module greenlight.andeyklimov.net
+module greenlight.andreyklimov.net
 
 go 1.23.4
 
