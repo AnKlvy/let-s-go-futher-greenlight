@@ -1,56 +1,99 @@
 package main
 
 import (
+	"context"     
+	"database/sql"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"time"
+	// Импортируем драйвер pq, чтобы он зарегистрировался в database/sql.
+	// Используем пустой идентификатор `_`, чтобы компилятор Go не жаловался на неиспользуемый импорт.
+	_ "github.com/lib/pq"
 )
 
-// Declare a string containing the application version number. Later in the book we'll
-// generate this automatically at build time, but for now we'll just store the version
-// number as a hard-coded global constant.
 const version = "1.0.0"
 
-// Define a config struct to hold all the configuration settings for our application.
-// For now, the only configuration settings will be the network port that we want the
-// server to listen on, and the name of the current operating environment for the
-// application (development, staging, production, etc.). We will read in these
-// configuration settings from command-line flags when the application starts.
+// Определяем структуру config для хранения настроек приложения.
 type config struct {
 	port int
 	env  string
+	db   struct {
+		dsn string
+	}
 }
 
-// Define an application struct to hold the dependencies for our HTTP handlers, helpers,
-// and middleware. At the moment this only contains a copy of the config struct and a
-// logger, but it will grow to include a lot more as our build progresses.
+// Определяем структуру application, которая будет содержать конфигурацию и логгер.
 type application struct {
 	config config
 	logger *log.Logger
 }
 
 func main() {
+	// Создаём переменную конфигурации cfg.
 	var cfg config
+	
+	// Читаем параметры командной строки (флаги).
 	flag.IntVar(&cfg.port, "port", 4000, "API server port")
 	flag.StringVar(&cfg.env, "env", "development", "Environment (development|staging|production)")
+	// Читаем DSN для базы данных из командной строки, если флаг не указан, используем значение по умолчанию.
+	flag.StringVar(&cfg.db.dsn, "db-dsn", "postgres://greenlight:pa55word@localhost/greenlight", "PostgreSQL DSN")
 	flag.Parse()
+	
+	// Создаём логгер, который будет писать в stdout.
 	logger := log.New(os.Stdout, "", log.Ldate|log.Ltime)
+	
+	// Открываем соединение с базой данных через openDB().
+	db, err := openDB(cfg)
+	if err != nil {
+		logger.Fatal(err) // Завершаем работу, если не удалось подключиться к базе.
+	}
+	defer db.Close() // Закрываем соединение при завершении работы.
+
+	logger.Printf("database connection pool established") // Логируем успешное подключение.
+
+	// Создаём экземпляр application.
 	app := &application{
 		config: cfg,
 		logger: logger,
 	}
-	// Use the httprouter instance returned by app.routes() as the server handler.
+
+	// Настраиваем HTTP-сервер.
 	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.port),
-		Handler:      app.routes(),
-		IdleTimeout:  time.Minute,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		Addr:         fmt.Sprintf(":%d", cfg.port), // Указываем порт из конфигурации.
+		Handler:      app.routes(), // Подключаем маршруты (функция будет определена позже).
+		IdleTimeout:  time.Minute, // Максимальное время простоя соединения.
+		ReadTimeout:  10 * time.Second, // Таймаут на чтение запроса.
+		WriteTimeout: 30 * time.Second, // Таймаут на отправку ответа.
 	}
+
 	logger.Printf("starting %s server on %s", cfg.env, srv.Addr)
-	err := srv.ListenAndServe()
+
+	// Запускаем сервер и, если возникнет ошибка, логируем её.
+	err = srv.ListenAndServe()
 	logger.Fatal(err)
+}
+
+// Функция openDB() создаёт пул подключений к базе данных.
+func openDB(cfg config) (*sql.DB, error) {
+	// Открываем соединение с базой данных через sql.Open().
+	db, err := sql.Open("postgres", cfg.db.dsn)
+	if err != nil {
+		return nil, err
+	}
+
+	// Создаём контекст с таймаутом 5 секунд.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Проверяем соединение с базой через PingContext().
+	err = db.PingContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Возвращаем пул подключений.
+	return db, nil
 }
