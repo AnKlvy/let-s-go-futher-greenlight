@@ -1,9 +1,35 @@
 package data
 
 import (
-	"time"
+	"database/sql" // Новый импорт
 	"greenlight.andreyklimov.net/internal/validator"
+	"time"
 )
+
+// Определяем структуру MovieModel, которая содержит пул соединений с базой данных.
+type MovieModel struct {
+	DB *sql.DB
+}
+
+// Добавляем заглушку метода для вставки нового фильма в таблицу movies.
+func (m MovieModel) Insert(movie *Movie) error {
+	return nil
+}
+
+// Добавляем заглушку метода для получения конкретного фильма по ID.
+func (m MovieModel) Get(id int64) (*Movie, error) {
+	return nil, nil
+}
+
+// Добавляем заглушку метода для обновления информации о фильме.
+func (m MovieModel) Update(movie *Movie) error {
+	return nil
+}
+
+// Добавляем заглушку метода для удаления фильма по ID.
+func (m MovieModel) Delete(id int64) error {
+	return nil
+}
 
 type Movie struct {
 	ID        int64     `json:"id"`
