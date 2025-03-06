@@ -11,10 +11,22 @@ var (
 	ErrRecordNotFound = errors.New("record not found")
 )
 
-// Создаем структуру Models, которая оборачивает MovieModel. Позже мы добавим сюда и другие модели,
-// такие как UserModel и PermissionModel, по мере разработки.
 type Models struct {
-	Movies MovieModel
+	// Устанавливаем поле Movies как интерфейс, содержащий методы, которые должны поддерживать
+	// как 'реальная' модель, так и мок-модель.
+	Movies interface {
+		Insert(movie *Movie) error
+		Get(id int64) (*Movie, error)
+		Update(movie *Movie) error
+		Delete(id int64) error
+	}
+}
+
+// Создаем вспомогательную функцию, которая возвращает экземпляр Models, содержащий только мок-модели.
+func NewMockModels() Models {
+	return Models{
+		Movies: MockMovieModel{},
+	}
 }
 
 // Для удобства мы также добавляем метод New(), который возвращает структуру Models
