@@ -72,9 +72,24 @@ func (m MovieModel) Get(id int64) (*Movie, error) {
 	return &movie, nil
 }
 
-// Добавляем заглушку метода для обновления информации о фильме.
 func (m MovieModel) Update(movie *Movie) error {
-	return nil
+	// Объявляем SQL-запрос для обновления записи и возврата нового номера версии.
+	query := `
+	UPDATE movies
+	SET title = $1, year = $2, runtime = $3, genres = $4, version = version + 1
+	WHERE id = $5
+	RETURNING version`
+	// Создаем срез args, содержащий значения для параметров запроса.
+	args := []any{
+		movie.Title,
+		movie.Year,
+		movie.Runtime,
+		pq.Array(movie.Genres),
+		movie.ID,
+	}
+	// Используем метод QueryRow() для выполнения запроса, передавая срез args
+	// в качестве вариадического параметра и записываем новое значение версии в структуру movie.
+	return m.DB.QueryRow(query, args...).Scan(&movie.Version)
 }
 
 // Добавляем заглушку метода для удаления фильма по ID.

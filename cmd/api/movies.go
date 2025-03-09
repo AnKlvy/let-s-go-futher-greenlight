@@ -86,3 +86,66 @@ func (app *application) showMovieHandler(w http.ResponseWriter, r *http.Request)
 		app.serverErrorResponse(w, r, err)
 	}
 }
+
+func (app *application) updateMovieHandler(w http.ResponseWriter, r *http.Request) {
+	// Извлекаем идентификатор фильма из URL.
+	id, err := app.readIDParam(r)
+	if err != nil {
+		app.notFoundResponse(w, r)
+		return
+	}
+	// Получаем существующую запись фильма из базы данных. Если запись не найдена,
+	// отправляем клиенту ответ с кодом 404 Not Found.
+	movie, err := app.models.Movies.Get(id)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrRecordNotFound):
+			app.notFoundResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	// Объявляем структуру input для хранения ожидаемых данных от клиента.
+	var input struct {
+		Title   string        `json:"title"`
+		Year    int32         `json:"year"`
+		Runtime data.Runtime  `json:"runtime"`
+		Genres  []string      `json:"genres"`
+	}
+
+	// Считываем JSON-данные из тела запроса в структуру input.
+	err = app.readJSON(w, r, &input)
+	if err != nil {
+		app.badRequestResponse(w, r, err)
+		return
+	}
+
+	// Копируем значения из тела запроса в соответствующие поля структуры movie.
+	movie.Title = input.Title
+	movie.Year = input.Year
+	movie.Runtime = input.Runtime
+	movie.Genres = input.Genres
+
+	// Проверяем обновленные данные фильма, отправляем клиенту ответ 422 Unprocessable Entity,
+	// если проверка не пройдена.
+	v := validator.New()
+	if data.ValidateMovie(v, movie); !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
+		return
+	}
+
+	// Передаем обновленную запись фильма в метод Update().
+	err = app.models.Movies.Update(movie)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// Отправляем обновленную запись фильма в JSON-ответе.
+	err = app.writeJSON(w, http.StatusOK, envelope{"movie": movie}, nil)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
+}
