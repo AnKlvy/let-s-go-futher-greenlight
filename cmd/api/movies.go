@@ -94,8 +94,8 @@ func (app *application) updateMovieHandler(w http.ResponseWriter, r *http.Reques
 		app.notFoundResponse(w, r)
 		return
 	}
-	// Получаем существующую запись фильма из базы данных. Если запись не найдена,
-	// отправляем клиенту ответ с кодом 404 Not Found.
+
+	// Получаем запись о фильме как обычно.
 	movie, err := app.models.Movies.Get(id)
 	if err != nil {
 		switch {
@@ -107,43 +107,57 @@ func (app *application) updateMovieHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Объявляем структуру input для хранения ожидаемых данных от клиента.
+	// Используем указатели для полей Title, Year и Runtime.
 	var input struct {
-		Title   string        `json:"title"`
-		Year    int32         `json:"year"`
-		Runtime data.Runtime  `json:"runtime"`
+		Title   *string       `json:"title"`
+		Year    *int32        `json:"year"`
+		Runtime *data.Runtime `json:"runtime"`
 		Genres  []string      `json:"genres"`
 	}
 
-	// Считываем JSON-данные из тела запроса в структуру input.
+	// Декодируем JSON как обычно.
 	err = app.readJSON(w, r, &input)
 	if err != nil {
 		app.badRequestResponse(w, r, err)
 		return
 	}
 
-	// Копируем значения из тела запроса в соответствующие поля структуры movie.
-	movie.Title = input.Title
-	movie.Year = input.Year
-	movie.Runtime = input.Runtime
-	movie.Genres = input.Genres
+	// Если значение input.Title равно nil, значит, в JSON-запросе не было передано
+	// соответствующей пары "ключ-значение" для "title". В этом случае оставляем
+	// запись о фильме без изменений. В противном случае обновляем значение title.
+	// Важно: так как input.Title теперь является указателем на строку, перед
+	// присвоением значения в структуру фильма необходимо разыменовать указатель
+	// с помощью оператора *.
+	if input.Title != nil {
+		movie.Title = *input.Title
+	}
 
-	// Проверяем обновленные данные фильма, отправляем клиенту ответ 422 Unprocessable Entity,
-	// если проверка не пройдена.
+	// Аналогично обновляем остальные поля в структуре input.
+	if input.Year != nil {
+		movie.Year = *input.Year
+	}
+	if input.Runtime != nil {
+		movie.Runtime = *input.Runtime
+	}
+	if input.Genres != nil {
+		movie.Genres = input.Genres // Для срезов разыменование не требуется.
+	}
+
+	// Валидируем обновлённую запись фильма.
 	v := validator.New()
 	if data.ValidateMovie(v, movie); !v.Valid() {
 		app.failedValidationResponse(w, r, v.Errors)
 		return
 	}
 
-	// Передаем обновленную запись фильма в метод Update().
+	// Сохраняем изменения в базе данных.
 	err = app.models.Movies.Update(movie)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 		return
 	}
 
-	// Отправляем обновленную запись фильма в JSON-ответе.
+	// Отправляем обновлённую запись фильма в JSON-ответе.
 	err = app.writeJSON(w, http.StatusOK, envelope{"movie": movie}, nil)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
