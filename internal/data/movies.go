@@ -1,11 +1,11 @@
 package data
 
 import (
-	"database/sql" // Новый импорт
+	"database/sql"
+	"errors"
+	"github.com/lib/pq"
 	"greenlight.andreyklimov.net/internal/validator"
 	"time"
-	"github.com/lib/pq" // New import
-
 )
 
 // Определяем структуру MovieModel, которая содержит пул соединений с базой данных.
@@ -32,10 +32,44 @@ func (m MovieModel) Insert(movie *Movie) error {
 	return m.DB.QueryRow(query, args...).Scan(&movie.ID, &movie.CreatedAt, &movie.Version)
 }
 
-
-// Добавляем заглушку метода для получения конкретного фильма по ID.
 func (m MovieModel) Get(id int64) (*Movie, error) {
-	return nil, nil
+	// Тип bigserial в PostgreSQL начинает автоинкрементацию с 1 по умолчанию,
+	// поэтому мы знаем, что фильмы не могут иметь ID меньше 1.
+	// Чтобы избежать ненужного запроса к базе данных, сразу возвращаем ошибку ErrRecordNotFound.
+	if id < 1 {
+		return nil, ErrRecordNotFound
+	}
+	// Определяем SQL-запрос для получения данных о фильме.
+	query := `
+	SELECT id, created_at, title, year, runtime, genres, version
+	FROM movies
+	WHERE id = $1`
+	// Объявляем структуру Movie для хранения данных, полученных из запроса.
+	var movie Movie
+	// Выполняем запрос с помощью метода QueryRow(), передавая значение id в качестве параметра.
+	// Затем используем Scan() для записи данных в структуру Movie.
+	// Важно: для преобразования данных столбца genres снова используем адаптер pq.Array().
+	err := m.DB.QueryRow(query, id).Scan(
+		&movie.ID,
+		&movie.CreatedAt,
+		&movie.Title,
+		&movie.Year,
+		&movie.Runtime,
+		pq.Array(&movie.Genres),
+		&movie.Version,
+	)
+	// Обрабатываем возможные ошибки. Если фильм не найден, Scan() вернет ошибку sql.ErrNoRows.
+	// В этом случае возвращаем нашу кастомную ошибку ErrRecordNotFound.
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil, ErrRecordNotFound
+		default:
+			return nil, err
+		}
+	}
+	// Если ошибок нет, возвращаем указатель на структуру Movie.
+	return &movie, nil
 }
 
 // Добавляем заглушку метода для обновления информации о фильме.
