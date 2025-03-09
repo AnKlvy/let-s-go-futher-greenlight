@@ -92,8 +92,37 @@ func (m MovieModel) Update(movie *Movie) error {
 	return m.DB.QueryRow(query, args...).Scan(&movie.Version)
 }
 
-// Добавляем заглушку метода для удаления фильма по ID.
 func (m MovieModel) Delete(id int64) error {
+	// Возвращаем ошибку ErrRecordNotFound, если ID фильма меньше 1.
+	if id < 1 {
+		return ErrRecordNotFound
+	}
+
+	// Формируем SQL-запрос для удаления записи.
+	query := `
+		DELETE FROM movies
+		WHERE id = $1`
+
+	// Выполняем SQL-запрос с помощью метода Exec(), передавая переменную id 
+	// в качестве значения для плейсхолдера. Метод Exec() возвращает объект sql.Result.
+	result, err := m.DB.Exec(query, id)
+	if err != nil {
+		return err
+	}
+
+	// Вызываем метод RowsAffected() у объекта sql.Result, чтобы получить количество 
+	// строк, затронутых запросом.
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	// Если ни одна строка не была затронута, значит, в таблице movies не было записи 
+	// с переданным ID на момент выполнения удаления. В этом случае возвращаем ошибку ErrRecordNotFound.
+	if rowsAffected == 0 {
+		return ErrRecordNotFound
+	}
+
 	return nil
 }
 

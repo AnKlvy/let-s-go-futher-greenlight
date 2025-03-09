@@ -149,3 +149,31 @@ func (app *application) updateMovieHandler(w http.ResponseWriter, r *http.Reques
 		app.serverErrorResponse(w, r, err)
 	}
 }
+
+func (app *application) deleteMovieHandler(w http.ResponseWriter, r *http.Request) {
+	// Извлекаем ID фильма из URL.
+	id, err := app.readIDParam(r)
+	if err != nil {
+		app.notFoundResponse(w, r)
+		return
+	}
+
+	// Удаляем фильм из базы данных, отправляя клиенту ответ 404 Not Found,
+	// если соответствующая запись не найдена.
+	err = app.models.Movies.Delete(id)
+	if err != nil {
+		switch {
+		case errors.Is(err, data.ErrRecordNotFound):
+			app.notFoundResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
+		return
+	}
+
+	// Возвращаем статус 200 OK вместе с сообщением об успешном удалении.
+	err = app.writeJSON(w, http.StatusOK, envelope{"message": "фильм успешно удален"}, nil)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
+}
