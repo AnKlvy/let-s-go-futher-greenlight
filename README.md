@@ -27,3 +27,8 @@ migrate -path ./migrations -database "postgres://greenlight:pa55word@localhost/g
 
 # Откат миграций до определенной версии
 migrate -path ./migrations -database $EXAMPLE_DSN goto 1
+
+# Тест для optimistic locking (PowerShell)
+ 1..8 | ForEach-Object -Parallel {
+    Invoke-RestMethod -Uri "http://localhost:4000/v1/movies/6" -Method Patch -Body '{"runtime": "97 mins"}' -ContentType "application/json"
+ } -ThrottleLimit 8

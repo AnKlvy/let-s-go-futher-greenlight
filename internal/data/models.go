@@ -5,10 +5,9 @@ import (
 	"errors"
 )
 
-// Определяем пользовательскую ошибку ErrRecordNotFound. Мы будем возвращать ее из метода Get(),
-// если попытаемся найти фильм, которого нет в базе данных.
 var (
 	ErrRecordNotFound = errors.New("record not found")
+	ErrEditConflict = errors.New("edit conflict")
 )
 
 type Models struct {

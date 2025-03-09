@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"greenlight.andreyklimov.net/internal/data"
 	"greenlight.andreyklimov.net/internal/validator"
@@ -107,6 +108,15 @@ func (app *application) updateMovieHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Если в запросе присутствует заголовок X-Expected-Version,
+	// проверяем, что версия фильма в базе данных совпадает с указанной в заголовке.
+	if r.Header.Get("X-Expected-Version") != "" {
+		if strconv.FormatInt(int64(movie.Version), 32) != r.Header.Get("X-Expected-Version") {
+			app.editConflictResponse(w, r)
+			return
+		}
+	}
+
 	// Используем указатели для полей Title, Year и Runtime.
 	var input struct {
 		Title   *string       `json:"title"`
@@ -150,14 +160,18 @@ func (app *application) updateMovieHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Сохраняем изменения в базе данных.
+	// Перехватываем ошибку ErrEditConflict и вызываем новый вспомогательный метод
+	// editConflictResponse().
 	err = app.models.Movies.Update(movie)
 	if err != nil {
-		app.serverErrorResponse(w, r, err)
+		switch {
+		case errors.Is(err, data.ErrEditConflict):
+			app.editConflictResponse(w, r)
+		default:
+			app.serverErrorResponse(w, r, err)
+		}
 		return
 	}
-
-	// Отправляем обновлённую запись фильма в JSON-ответе.
 	err = app.writeJSON(w, http.StatusOK, envelope{"movie": movie}, nil)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)

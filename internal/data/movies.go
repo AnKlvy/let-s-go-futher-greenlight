@@ -73,23 +73,33 @@ func (m MovieModel) Get(id int64) (*Movie, error) {
 }
 
 func (m MovieModel) Update(movie *Movie) error {
-	// Объявляем SQL-запрос для обновления записи и возврата нового номера версии.
+	// Добавляем условие 'AND version = $6' в SQL-запрос.
 	query := `
 	UPDATE movies
 	SET title = $1, year = $2, runtime = $3, genres = $4, version = version + 1
-	WHERE id = $5
+	WHERE id = $5 AND version = $6
 	RETURNING version`
-	// Создаем срез args, содержащий значения для параметров запроса.
 	args := []any{
 		movie.Title,
 		movie.Year,
 		movie.Runtime,
 		pq.Array(movie.Genres),
 		movie.ID,
+		movie.Version, // Добавляем ожидаемую версию фильма.
 	}
-	// Используем метод QueryRow() для выполнения запроса, передавая срез args
-	// в качестве вариадического параметра и записываем новое значение версии в структуру movie.
-	return m.DB.QueryRow(query, args...).Scan(&movie.Version)
+	// Выполняем SQL-запрос. Если соответствующая строка не найдена, это означает,
+	// что версия фильма изменилась (или запись была удалена), и мы возвращаем
+	// нашу пользовательскую ошибку ErrEditConflict.
+	err := m.DB.QueryRow(query, args...).Scan(&movie.Version)
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return ErrEditConflict
+		default:
+			return err
+		}
+	}
+	return nil
 }
 
 func (m MovieModel) Delete(id int64) error {
@@ -103,21 +113,21 @@ func (m MovieModel) Delete(id int64) error {
 		DELETE FROM movies
 		WHERE id = $1`
 
-	// Выполняем SQL-запрос с помощью метода Exec(), передавая переменную id 
+	// Выполняем SQL-запрос с помощью метода Exec(), передавая переменную id
 	// в качестве значения для плейсхолдера. Метод Exec() возвращает объект sql.Result.
 	result, err := m.DB.Exec(query, id)
 	if err != nil {
 		return err
 	}
 
-	// Вызываем метод RowsAffected() у объекта sql.Result, чтобы получить количество 
+	// Вызываем метод RowsAffected() у объекта sql.Result, чтобы получить количество
 	// строк, затронутых запросом.
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		return err
 	}
 
-	// Если ни одна строка не была затронута, значит, в таблице movies не было записи 
+	// Если ни одна строка не была затронута, значит, в таблице movies не было записи
 	// с переданным ID на момент выполнения удаления. В этом случае возвращаем ошибку ErrRecordNotFound.
 	if rowsAffected == 0 {
 		return ErrRecordNotFound
