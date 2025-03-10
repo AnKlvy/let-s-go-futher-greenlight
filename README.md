@@ -13,6 +13,7 @@ docker exec -it postgres_greenlight psql -U greenlight -d greenlight
 # Создание миграций
 migrate create -seq -ext .sql -dir ./migrations create_movies_table \
 migrate create -seq -ext .sql -dir ./migrations add_movies_check_constraints
+migrate create -seq -ext .sql -dir ./migrations add_movies_indexes
 
 # Применение миграций
 # С использованием переменной окружения
