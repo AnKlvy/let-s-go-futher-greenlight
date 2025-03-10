@@ -3,11 +3,14 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"fmt" // New import
-	"io"  // New import
+	"fmt"
+	"io" 
 	"net/http"
 	"strconv"
 	"strings"
+
+	"greenlight.andreyklimov.net/internal/validator"
+	"net/url"
 
 	"github.com/julienschmidt/httprouter"
 )
@@ -102,3 +105,54 @@ func (app *application) readJSON(w http.ResponseWriter, r *http.Request, dst any
 	}
 	return nil
 }
+
+// Вспомогательная функция readString() возвращает строковое значение из строки запроса
+// или указанное значение по умолчанию, если соответствующий ключ не найден.
+func (app *application) readString(qs url.Values, key string, defaultValue string) string {
+    // Извлекаем значение для заданного ключа из строки запроса. Если ключ отсутствует,
+    // будет возвращена пустая строка "".
+    s := qs.Get(key)
+    // Если ключ отсутствует (или значение пустое), возвращаем значение по умолчанию.
+    if s == "" {
+        return defaultValue
+    }
+    // В противном случае возвращаем строку.
+    return s
+}
+
+// Вспомогательная функция readCSV() получает строковое значение из строки запроса,
+// затем разбивает его на срез по символу запятой. Если ключ не найден, возвращает
+// указанное значение по умолчанию.
+func (app *application) readCSV(qs url.Values, key string, defaultValue []string) []string {
+    // Извлекаем значение из строки запроса.
+    csv := qs.Get(key)
+    // Если ключ отсутствует (или значение пустое), возвращаем значение по умолчанию.
+    if csv == "" {
+        return defaultValue
+    }
+    // В противном случае разбираем значение в срез []string и возвращаем его.
+    return strings.Split(csv, ",")
+}
+
+// Вспомогательная функция readInt() получает строковое значение из строки запроса,
+// затем преобразует его в целое число перед возвратом. Если ключ не найден, возвращает
+// указанное значение по умолчанию. Если значение нельзя преобразовать в целое число,
+// записывает сообщение об ошибке в переданный экземпляр Validator.
+func (app *application) readInt(qs url.Values, key string, defaultValue int, v *validator.Validator) int {
+    // Извлекаем значение из строки запроса.
+    s := qs.Get(key)
+    // Если ключ отсутствует (или значение пустое), возвращаем значение по умолчанию.
+    if s == "" {
+        return defaultValue
+    }
+    // Пытаемся преобразовать значение в int. Если не удаётся, добавляем сообщение
+    // об ошибке в экземпляр валидатора и возвращаем значение по умолчанию.
+    i, err := strconv.Atoi(s)
+    if err != nil {
+        v.AddError(key, "must be an integer value")
+        return defaultValue
+    }
+    // В противном случае возвращаем преобразованное целое число.
+    return i
+}
+

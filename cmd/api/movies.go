@@ -200,8 +200,52 @@ func (app *application) deleteMovieHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Возвращаем статус 200 OK вместе с сообщением об успешном удалении.
-	err = app.writeJSON(w, http.StatusOK, envelope{"message": "фильм успешно удален"}, nil)
+	err = app.writeJSON(w, http.StatusOK, envelope{"message": "movie deleted successfuly"}, nil)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 	}
 }
+
+func (app *application) listMoviesHandler(w http.ResponseWriter, r *http.Request) {
+	// Чтобы сохранить согласованность с другими обработчиками, мы определим структуру input
+	// для хранения ожидаемых значений из строки запроса.
+	var input struct {
+		Title    string
+		Genres   []string
+		Page     int
+		PageSize int
+		Sort     string
+	}
+	
+	// Инициализируем новый экземпляр Validator.
+	v := validator.New()
+	
+	// Вызываем r.URL.Query(), чтобы получить карту url.Values, содержащую данные строки запроса.
+	qs := r.URL.Query()
+	
+	// Используем вспомогательные функции для извлечения значений title и genres из строки запроса,
+	// с резервными значениями — пустой строкой и пустым срезом соответственно, если они не указаны клиентом.
+	input.Title = app.readString(qs, "title", "")
+	input.Genres = app.readCSV(qs, "genres", []string{})
+	
+	// Получаем значения page и page_size из строки запроса в виде целых чисел.
+	// По умолчанию устанавливаем page в 1, а page_size в 20.
+	// Передаем экземпляр валидатора как последний аргумент.
+	input.Page = app.readInt(qs, "page", 1, v)
+	input.PageSize = app.readInt(qs, "page_size", 20, v)
+	
+	// Извлекаем значение sort из строки запроса, используя "id" в качестве значения по умолчанию,
+	// если оно не указано клиентом (что подразумевает сортировку по ID фильма по возрастанию).
+	input.Sort = app.readString(qs, "sort", "id")
+	
+	// Проверяем, есть ли ошибки в экземпляре валидатора, и при необходимости отправляем клиенту ответ
+	// с ошибками с помощью вспомогательной функции failedValidationResponse().
+	if !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
+		return
+	}
+	
+	// Выводим содержимое структуры input в HTTP-ответ.
+	fmt.Fprintf(w, "%+v\n", input)
+	}
+	
