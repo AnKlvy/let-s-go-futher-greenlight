@@ -126,22 +126,25 @@ func (m MovieModel) Delete(id int64) error {
 }
 
 func (m MovieModel) GetAll(title string, genres []string, filters Filters) ([]*Movie, error) {
-	// Add an ORDER BY clause and interpolate the sort column and direction. Importantly
-	// notice that we also include a secondary sort on the movie ID to ensure a
-	// consistent ordering.
+	// Обновляем SQL-запрос, добавляя операторы LIMIT и OFFSET с параметрами-заполнителями.
 	query := fmt.Sprintf(`
-	SELECT id, created_at, title, year, runtime, genres, version
-	FROM movies
-	WHERE (to_tsvector('simple', title) @@ plainto_tsquery('simple', $1) OR $1 = '')
-	AND (genres @> $2 OR $2 = '{}')
-	ORDER BY %s %s, id ASC`, filters.sortColumn(), filters.sortDirection())
+		SELECT id, created_at, title, year, runtime, genres, version
+		FROM movies
+		WHERE (to_tsvector('simple', title) @@ plainto_tsquery('simple', $1) OR $1 = '')
+		AND (genres @> $2 OR $2 = '{}')
+		ORDER BY %s %s, id ASC
+		LIMIT $3 OFFSET $4`, filters.sortColumn(), filters.sortDirection())
 
-	// Создаем контекст с тайм-аутом в 3 секунды.
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	// Передаем параметры title и genres в качестве значений для плейсхолдеров.
-	rows, err := m.DB.QueryContext(ctx, query, title, pq.Array(genres))
+	// Так как в нашем SQL-запросе теперь используется несколько параметров-заполнителей,
+	// собираем значения этих параметров в срез. Обратите внимание, что здесь мы вызываем
+	// методы limit() и offset() у структуры Filters для получения соответствующих значений.
+	args := []any{title, pq.Array(genres), filters.limit(), filters.offset()}
+
+	// Затем передаем срез args в QueryContext() в качестве вариативного параметра.
+	rows, err := m.DB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

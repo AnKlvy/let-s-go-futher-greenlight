@@ -12,6 +12,13 @@ type Filters struct {
 	SortSafelist []string
 }
 
+func (f Filters) limit() int {
+	return f.PageSize
+}
+func (f Filters) offset() int {
+	return (f.Page - 1) * f.PageSize
+}
+
 // Проверяем, соответствует ли переданное значение Sort одному из допустимых значений,
 // и если да, извлекаем имя столбца, удаляя ведущий знак минуса (если он есть).
 func (f Filters) sortColumn() string {
