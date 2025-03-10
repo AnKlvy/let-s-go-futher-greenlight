@@ -124,6 +124,65 @@ func (m MovieModel) Delete(id int64) error {
 	return nil
 }
 
+// Создаем новый метод GetAll(), который возвращает срез фильмов. Хотя мы
+// пока не используем их, мы настроили его так, чтобы он принимал различные параметры фильтрации.
+func (m MovieModel) GetAll(title string, genres []string, filters Filters) ([]*Movie, error) {
+	// Формируем SQL-запрос для получения всех записей о фильмах.
+	query := `
+		SELECT id, created_at, title, year, runtime, genres, version
+		FROM movies
+		ORDER BY id`
+
+	// Создаем контекст с тайм-аутом в 3 секунды.
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	// Используем QueryContext() для выполнения запроса. Это возвращает sql.Rows с результатами.
+	rows, err := m.DB.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	// Важно: откладываем вызов rows.Close(), чтобы убедиться, что resultset будет закрыт перед выходом из GetAll().
+	defer rows.Close()
+
+	// Инициализируем пустой срез для хранения данных о фильмах.
+	movies := []*Movie{}
+
+	// Используем rows.Next для перебора строк в результате запроса.
+	for rows.Next() {
+		// Инициализируем пустую структуру Movie для хранения данных об отдельном фильме.
+		var movie Movie
+
+		// Считываем значения из строки в структуру Movie. Обратите внимание, что
+		// для поля genres мы используем адаптер pq.Array().
+		err := rows.Scan(
+			&movie.ID,
+			&movie.CreatedAt,
+			&movie.Title,
+			&movie.Year,
+			&movie.Runtime,
+			pq.Array(&movie.Genres),
+			&movie.Version,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		// Добавляем структуру Movie в срез.
+		movies = append(movies, &movie)
+	}
+
+	// После завершения итерации по rows.Next() вызываем rows.Err(),
+	// чтобы получить любую ошибку, возникшую во время итерации.
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Если все прошло успешно, возвращаем срез фильмов.
+	return movies, nil
+}
+
 type MockMovieModel struct{}
 
 func (m MockMovieModel) Insert(movie *Movie) error {
@@ -140,6 +199,10 @@ func (m MockMovieModel) Update(movie *Movie) error {
 
 func (m MockMovieModel) Delete(id int64) error {
 	return nil
+}
+
+func (m MockMovieModel) GetAll(title string, genres []string, filters Filters) ([]*Movie, error) {
+	return nil, nil
 }
 
 type Movie struct {

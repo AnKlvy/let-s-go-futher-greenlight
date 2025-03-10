@@ -219,12 +219,23 @@ func (app *application) listMoviesHandler(w http.ResponseWriter, r *http.Request
 	input.Filters.Page = app.readInt(qs, "page", 1, v)
 	input.Filters.PageSize = app.readInt(qs, "page_size", 20, v)
 	input.Filters.Sort = app.readString(qs, "sort", "id")
-	// Добавляем поддерживаемые значения сортировки для этого эндпоинта в safelist.
 	input.Filters.SortSafelist = []string{"id", "title", "year", "runtime", "-id", "-title", "-year", "-runtime"}
-	// Выполняем проверки валидации структуры Filters и отправляем ответ с ошибками, если необходимо.
+
 	if data.ValidateFilters(v, input.Filters); !v.Valid() {
 		app.failedValidationResponse(w, r, v.Errors)
 		return
 	}
-	fmt.Fprintf(w, "%+v\n", input)
+
+	// Вызываем метод GetAll() для получения списка фильмов, передавая параметры фильтрации.
+	movies, err := app.models.Movies.GetAll(input.Title, input.Genres, input.Filters)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+		return
+	}
+
+	// Отправляем JSON-ответ с данными о фильмах.
+	err = app.writeJSON(w, http.StatusOK, envelope{"movies": movies}, nil)
+	if err != nil {
+		app.serverErrorResponse(w, r, err)
+	}
 }
