@@ -2,14 +2,34 @@ package data
 
 import (
 	"greenlight.andreyklimov.net/internal/validator"
+	"strings" // Новый импорт
 )
 
-// Добавляем поле SortSafelist для хранения поддерживаемых значений сортировки.
 type Filters struct {
 	Page         int
 	PageSize     int
 	Sort         string
 	SortSafelist []string
+}
+
+// Проверяем, соответствует ли переданное значение Sort одному из допустимых значений,
+// и если да, извлекаем имя столбца, удаляя ведущий знак минуса (если он есть).
+func (f Filters) sortColumn() string {
+	for _, safeValue := range f.SortSafelist {
+		if f.Sort == safeValue {
+			return strings.TrimPrefix(f.Sort, "-")
+		}
+	}
+	panic("unsafe sort parameter: " + f.Sort)
+}
+
+// Возвращает направление сортировки ("ASC" или "DESC") в зависимости от
+// префиксного символа в поле Sort.
+func (f Filters) sortDirection() string {
+	if strings.HasPrefix(f.Sort, "-") {
+		return "DESC"
+	}
+	return "ASC"
 }
 
 func ValidateFilters(v *validator.Validator, f Filters) {
