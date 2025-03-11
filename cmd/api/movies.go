@@ -208,9 +208,9 @@ func (app *application) deleteMovieHandler(w http.ResponseWriter, r *http.Reques
 
 func (app *application) listMoviesHandler(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Title  string
-		Genres []string
-		data.Filters
+	Title string
+	Genres []string
+	data.Filters
 	}
 	v := validator.New()
 	qs := r.URL.Query()
@@ -220,22 +220,20 @@ func (app *application) listMoviesHandler(w http.ResponseWriter, r *http.Request
 	input.Filters.PageSize = app.readInt(qs, "page_size", 20, v)
 	input.Filters.Sort = app.readString(qs, "sort", "id")
 	input.Filters.SortSafelist = []string{"id", "title", "year", "runtime", "-id", "-title", "-year", "-runtime"}
-
 	if data.ValidateFilters(v, input.Filters); !v.Valid() {
-		app.failedValidationResponse(w, r, v.Errors)
-		return
+	app.failedValidationResponse(w, r, v.Errors)
+	return
 	}
-
-	// Вызываем метод GetAll() для получения списка фильмов, передавая параметры фильтрации.
-	movies, err := app.models.Movies.GetAll(input.Title, input.Genres, input.Filters)
+	// Accept the metadata struct as a return value.
+	movies, metadata, err := app.models.Movies.GetAll(input.Title, input.Genres, input.Filters)
 	if err != nil {
-		app.serverErrorResponse(w, r, err)
-		return
+	app.serverErrorResponse(w, r, err)
+	return
 	}
-
-	// Отправляем JSON-ответ с данными о фильмах.
-	err = app.writeJSON(w, http.StatusOK, envelope{"movies": movies}, nil)
+	// Include the metadata in the response envelope.
+	err = app.writeJSON(w, http.StatusOK, envelope{"movies": movies, "metadata": metadata}, nil)
 	if err != nil {
-		app.serverErrorResponse(w, r, err)
+	app.serverErrorResponse(w, r, err)
 	}
-}
+	}
+	

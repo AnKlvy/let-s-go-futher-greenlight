@@ -2,7 +2,8 @@ package data
 
 import (
 	"greenlight.andreyklimov.net/internal/validator"
-	"strings" // Новый импорт
+	"math"
+	"strings"
 )
 
 type Filters struct {
@@ -48,4 +49,33 @@ func ValidateFilters(v *validator.Validator, f Filters) {
 
 	// Проверяем, что параметр sort соответствует значению из safelist.
 	v.Check(validator.PermittedValue(f.Sort, f.SortSafelist...), "sort", "invalid sort value")
+}
+
+// Определяем новую структуру Metadata для хранения метаданных пагинации.
+type Metadata struct {
+	CurrentPage  int `json:"current_page,omitempty"`
+	PageSize     int `json:"page_size,omitempty"`
+	FirstPage    int `json:"first_page,omitempty"`
+	LastPage     int `json:"last_page,omitempty"`
+	TotalRecords int `json:"total_records,omitempty"`
+}
+
+// Функция calculateMetadata() вычисляет соответствующие метаданные пагинации
+// на основе общего количества записей, текущей страницы и размера страницы.
+// Обратите внимание, что значение последней страницы вычисляется с помощью
+// функции math.Ceil(), которая округляет число вверх до ближайшего целого.
+// Например, если всего 12 записей и размер страницы 5, то последняя страница
+// будет вычисляться как math.Ceil(12/5) = 3.
+func calculateMetadata(totalRecords, page, pageSize int) Metadata {
+	if totalRecords == 0 {
+		// Если записей нет, возвращаем пустую структуру Metadata.
+		return Metadata{}
+	}
+	return Metadata{
+		CurrentPage:  page,
+		PageSize:     pageSize,
+		FirstPage:    1,
+		LastPage:     int(math.Ceil(float64(totalRecords) / float64(pageSize))),
+		TotalRecords: totalRecords,
+	}
 }

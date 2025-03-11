@@ -125,35 +125,36 @@ func (m MovieModel) Delete(id int64) error {
 	return nil
 }
 
-func (m MovieModel) GetAll(title string, genres []string, filters Filters) ([]*Movie, error) {
-	// Обновляем SQL-запрос, добавляя операторы LIMIT и OFFSET с параметрами-заполнителями.
+// Обновите сигнатуру функции, чтобы она возвращала структуру Metadata.
+func (m MovieModel) GetAll(title string, genres []string, filters Filters) ([]*Movie, Metadata, error) {
+	// Обновите SQL-запрос, добавив оконную функцию, которая считает общее количество
+	// (отфильтрированных) записей.
 	query := fmt.Sprintf(`
-		SELECT id, created_at, title, year, runtime, genres, version
-		FROM movies
-		WHERE (to_tsvector('simple', title) @@ plainto_tsquery('simple', $1) OR $1 = '')
-		AND (genres @> $2 OR $2 = '{}')
-		ORDER BY %s %s, id ASC
-		LIMIT $3 OFFSET $4`, filters.sortColumn(), filters.sortDirection())
+        SELECT count(*) OVER(), id, created_at, title, year, runtime, genres, version
+        FROM movies
+        WHERE (to_tsvector('simple', title) @@ plainto_tsquery('simple', $1) OR $1 = '')
+        AND (genres @> $2 OR $2 = '{}')
+        ORDER BY %s %s, id ASC
+        LIMIT $3 OFFSET $4`, filters.sortColumn(), filters.sortDirection())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	// Так как в нашем SQL-запросе теперь используется несколько параметров-заполнителей,
-	// собираем значения этих параметров в срез. Обратите внимание, что здесь мы вызываем
-	// методы limit() и offset() у структуры Filters для получения соответствующих значений.
 	args := []any{title, pq.Array(genres), filters.limit(), filters.offset()}
-
-	// Затем передаем срез args в QueryContext() в качестве вариативного параметра.
 	rows, err := m.DB.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return nil, Metadata{}, err // Вернуть пустую структуру Metadata в случае ошибки.
 	}
 	defer rows.Close()
 
+	// Объявляем переменную totalRecords.
+	totalRecords := 0
 	movies := []*Movie{}
+
 	for rows.Next() {
 		var movie Movie
 		err := rows.Scan(
+			&totalRecords, // Считаем количество записей из оконной функции.
 			&movie.ID,
 			&movie.CreatedAt,
 			&movie.Title,
@@ -163,17 +164,20 @@ func (m MovieModel) GetAll(title string, genres []string, filters Filters) ([]*M
 			&movie.Version,
 		)
 		if err != nil {
-			return nil, err
+			return nil, Metadata{}, err // Вернуть пустую структуру Metadata в случае ошибки.
 		}
 		movies = append(movies, &movie)
 	}
 
-	// Проверяем наличие ошибок при итерации по строкам.
 	if err = rows.Err(); err != nil {
-		return nil, err
+		return nil, Metadata{}, err // Вернуть пустую структуру Metadata в случае ошибки.
 	}
 
-	return movies, nil
+	// Генерируем структуру Metadata, передавая общее количество записей и параметры пагинации.
+	metadata := calculateMetadata(totalRecords, filters.Page, filters.PageSize)
+
+	// Возвращаем список фильмов и структуру metadata.
+	return movies, metadata, nil
 }
 
 type MockMovieModel struct{}
@@ -194,8 +198,8 @@ func (m MockMovieModel) Delete(id int64) error {
 	return nil
 }
 
-func (m MockMovieModel) GetAll(title string, genres []string, filters Filters) ([]*Movie, error) {
-	return nil, nil
+func (m MockMovieModel) GetAll(title string, genres []string, filters Filters) ([]*Movie, Metadata, error) {
+	return nil, Metadata{}, nil
 }
 
 type Movie struct {
