@@ -28,6 +28,14 @@ type config struct {
 		maxIdleConns int
 		maxIdleTime  string
 	}
+	// Добавляем новую структуру limiter, содержащую поля для количества запросов в секунду,
+	// максимального числа запросов в очереди (burst) и булево поле, которое можно использовать
+	// для включения/отключения ограничения запросов.
+	limiter struct {
+		rps     float64
+		burst   int
+		enabled bool
+	}
 }
 
 // Измените поле logger, чтобы оно имело тип *jsonlog.Logger вместо *log.Logger.
@@ -45,6 +53,11 @@ func main() {
 	flag.IntVar(&cfg.db.maxOpenConns, "db-max-open-conns", 25, "PostgreSQL max open connections")
 	flag.IntVar(&cfg.db.maxIdleConns, "db-max-idle-conns", 25, "PostgreSQL max idle connections")
 	flag.StringVar(&cfg.db.maxIdleTime, "db-max-idle-time", "15m", "PostgreSQL max connection idle time")
+	// Создаем флаги командной строки для чтения значений настроек в структуру config.
+	// Обратите внимание, что по умолчанию для параметра 'enabled' установлено значение true.
+	flag.Float64Var(&cfg.limiter.rps, "limiter-rps", 2, "Rate limiter maximum requests per second")
+	flag.IntVar(&cfg.limiter.burst, "limiter-burst", 4, "Rate limiter maximum burst")
+	flag.BoolVar(&cfg.limiter.enabled, "limiter-enabled", true, "Enable rate limiter")
 	flag.Parse()
 
 	// Инициализируйте новый jsonlog.Logger, который записывает все сообщения
@@ -72,14 +85,14 @@ func main() {
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.port),
 		Handler: app.routes(),
-		// Создается новый экземпляр Go log.Logger с помощью log.New(), 
-		// передавая кастомный Logger в качестве первого параметра. 
-		// Пустая строка и 0 указывают, что экземпляр log.Logger 
+		// Создается новый экземпляр Go log.Logger с помощью log.New(),
+		// передавая кастомный Logger в качестве первого параметра.
+		// Пустая строка и 0 указывают, что экземпляр log.Logger
 		// не должен использовать префикс или какие-либо флаги.
-		ErrorLog:      log.New(logger, "", 0),
-		IdleTimeout:   time.Minute,
-		ReadTimeout:   10 * time.Second,
-		WriteTimeout:  30 * time.Second,
+		ErrorLog:     log.New(logger, "", 0),
+		IdleTimeout:  time.Minute,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 30 * time.Second,
 	}
 
 	// Снова используем метод PrintInfo() для записи сообщения "starting server"

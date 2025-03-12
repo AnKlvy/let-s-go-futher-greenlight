@@ -2,7 +2,11 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"net/http"
+	"sync"
+	"time"
+
 	"golang.org/x/time/rate"
 )
 
@@ -31,20 +35,58 @@ func (app *application) recoverPanic(next http.Handler) http.Handler {
 }
 
 func (app *application) rateLimit(next http.Handler) http.Handler {
-	// Инициализируем новый ограничитель скорости, который разрешает в среднем 2 запроса в секунду,
-	// с максимальным "всплеском" в 4 запроса.
-	limiter := rate.NewLimiter(2, 4)
+	// Определяем структуру client, которая будет содержать ограничитель скорости и время последней активности для каждого клиента.
+	type client struct {
+		limiter  *rate.Limiter
+		lastSeen time.Time
+	}
 
-	// Функция, которую мы возвращаем, является замыканием, которое "захватывает" переменную limiter.
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Вызываем limiter.Allow(), чтобы проверить, разрешён ли запрос. Если нет,
-		// то вызываем вспомогательную функцию rateLimitExceededResponse(),
-		// чтобы вернуть ответ 429 Too Many Requests (мы создадим эту функцию позже).
-		if !limiter.Allow() {
-			app.rateLimitExceededResponse(w, r)
-			return
+	var (
+		mu sync.Mutex
+		// Обновляем карту так, чтобы значения были указателями на структуру client.
+		clients = make(map[string]*client)
+	)
+
+	// Запускаем фоновую горутину, которая раз в минуту удаляет старые записи из карты clients.
+	go func() {
+		for {
+			time.Sleep(time.Minute)
+			// Блокируем мьютекс, чтобы предотвратить выполнение проверок ограничителя скорости во время очистки.
+			mu.Lock()
+			// Проходим по всем клиентам. Если клиент не был активен в течение последних трех минут, удаляем его из карты.
+			for ip, client := range clients {
+				if time.Since(client.lastSeen) > 3*time.Minute {
+					delete(clients, ip)
+				}
+			}
+			// Важно разблокировать мьютекс после завершения очистки.
+			mu.Unlock()
 		}
+	}()
 
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Выполняем проверку только в том случае, если ограничение запросов включено.
+		if app.config.limiter.enabled {
+			ip, _, err := net.SplitHostPort(r.RemoteAddr)
+			if err != nil {
+				app.serverErrorResponse(w, r, err)
+				return
+			}
+			mu.Lock()
+			if _, found := clients[ip]; !found {
+				clients[ip] = &client{
+					// Используем значения количества запросов в секунду и burst из структуры config.
+					limiter: rate.NewLimiter(rate.Limit(app.config.limiter.rps), app.config.limiter.burst),
+				}
+			}
+			clients[ip].lastSeen = time.Now()
+			if !clients[ip].limiter.Allow() {
+				mu.Unlock()
+				app.rateLimitExceededResponse(w, r)
+				return
+			}
+			mu.Unlock()
+		}
 		next.ServeHTTP(w, r)
 	})
 }
