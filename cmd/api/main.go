@@ -7,7 +7,7 @@ import (
 	"fmt"
 	_ "github.com/lib/pq"
 	"greenlight.andreyklimov.net/internal/data"
-	"log"
+	"greenlight.andreyklimov.net/internal/jsonlog"
 	"net/http"
 	"os"
 	"time"
@@ -28,10 +28,10 @@ type config struct {
 	}
 }
 
-// Добавляем поле models для хранения нашей новой структуры Models.
+// Измените поле logger, чтобы оно имело тип *jsonlog.Logger вместо *log.Logger.
 type application struct {
 	config config
-	logger *log.Logger
+	logger *jsonlog.Logger
 	models data.Models
 }
 
@@ -45,17 +45,22 @@ func main() {
 	flag.StringVar(&cfg.db.maxIdleTime, "db-max-idle-time", "15m", "PostgreSQL max connection idle time")
 	flag.Parse()
 
-	logger := log.New(os.Stdout, "", log.Ldate|log.Ltime)
+	// Инициализируйте новый jsonlog.Logger, который записывает все сообщения
+	// *уровня INFO и выше* в стандартный поток вывода.
+	logger := jsonlog.New(os.Stdout, jsonlog.LevelInfo)
 
 	db, err := openDB(cfg)
 	if err != nil {
-		logger.Fatal(err)
+		// Используйте метод PrintFatal(), чтобы записать сообщение об ошибке
+		// с уровнем FATAL и завершить работу. У нас нет дополнительных параметров
+		// для включения в запись лога, поэтому мы передаем nil как второй параметр.
+		logger.PrintFatal(err, nil)
 	}
 	defer db.Close()
-	logger.Printf("database connection pool established")
 
-	// Используем функцию data.NewModels() для инициализации структуры Models,
-	// передавая в нее пул соединений в качестве параметра.
+	// Аналогично, используем метод PrintInfo() для записи сообщения уровня INFO.
+	logger.PrintInfo("database connection pool established", nil)
+
 	app := &application{
 		config: cfg,
 		logger: logger,
@@ -70,9 +75,18 @@ func main() {
 		WriteTimeout: 30 * time.Second,
 	}
 
-	logger.Printf("starting %s server on %s", cfg.env, srv.Addr)
+	// Снова используем метод PrintInfo() для записи сообщения "starting server"
+	// на уровне INFO. Но на этот раз передаем карту с дополнительными параметрами
+	// (операционная среда и адрес сервера) в качестве последнего параметра.
+	logger.PrintInfo("starting server", map[string]string{
+		"addr": srv.Addr,
+		"env":  cfg.env,
+	})
+
 	err = srv.ListenAndServe()
-	logger.Fatal(err)
+
+	// Используйте метод PrintFatal() для логирования ошибки и завершения работы.
+	logger.PrintFatal(err, nil)
 }
 
 func openDB(cfg config) (*sql.DB, error) {
