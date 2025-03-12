@@ -5,12 +5,14 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
-	_ "github.com/lib/pq"
-	"greenlight.andreyklimov.net/internal/data"
-	"greenlight.andreyklimov.net/internal/jsonlog"
+	"log"
 	"net/http"
 	"os"
 	"time"
+
+	_ "github.com/lib/pq"
+	"greenlight.andreyklimov.net/internal/data"
+	"greenlight.andreyklimov.net/internal/jsonlog"
 )
 
 const version = "1.0.0"
@@ -68,11 +70,16 @@ func main() {
 	}
 
 	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.port),
-		Handler:      app.routes(),
-		IdleTimeout:  time.Minute,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		Addr:    fmt.Sprintf(":%d", cfg.port),
+		Handler: app.routes(),
+		// Создается новый экземпляр Go log.Logger с помощью log.New(), 
+		// передавая кастомный Logger в качестве первого параметра. 
+		// Пустая строка и 0 указывают, что экземпляр log.Logger 
+		// не должен использовать префикс или какие-либо флаги.
+		ErrorLog:      log.New(logger, "", 0),
+		IdleTimeout:   time.Minute,
+		ReadTimeout:   10 * time.Second,
+		WriteTimeout:  30 * time.Second,
 	}
 
 	// Снова используем метод PrintInfo() для записи сообщения "starting server"
