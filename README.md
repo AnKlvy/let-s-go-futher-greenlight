@@ -33,3 +33,6 @@ migrate -path ./migrations -database $EXAMPLE_DSN goto 1
  1..8 | ForEach-Object -Parallel {
     Invoke-RestMethod -Uri "http://localhost:4000/v1/movies/6" -Method Patch -Body '{"runtime": "97 mins"}' -ContentType "application/json"
  } -ThrottleLimit 8
+
+ # Тест для rate limiting
+  1..6 | ForEach-Object { Invoke-WebRequest -Uri "http://localhost:4000/v1/healthcheck" }
