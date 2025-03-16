@@ -1,3 +1,8 @@
+# Зависимости
+go get github.com/julienschmidt/httprouter
+go get github.com/lib/pq
+go get golang.org/x/time/rate
+
 # Запуск Docker
 docker-compose up -d
 
